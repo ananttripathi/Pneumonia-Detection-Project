@@ -1,0 +1,66 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data (exclude large files)
+data/raw/*
+!data/raw/.gitkeep
+*.zip
+*.dcm
+
+# Models (will be mounted or downloaded)
+models/saved_models/*
+!models/saved_models/.gitkeep
+
+# Logs
+logs/*
+!logs/.gitkeep
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+docs/*
+!docs/.gitkeep
+
+# Tests
+tests/
+*.pyc
+.pytest_cache/
