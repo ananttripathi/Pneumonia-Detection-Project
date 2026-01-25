@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Virtual environments
+env/
+venv/
+.venv/
+ENV/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data (keep structure, ignore large files)
+data/raw/*
+!data/raw/.gitkeep
+*.zip
+*.dcm
+
+# Models (optional: uncomment to avoid tracking large model files)
+# models/saved_models/*
+# !models/saved_models/.gitkeep
+
+# Logs
+logs/*
+!logs/.gitkeep
+
+# Environment
+.env
+.env.local
+
+# Hugging Face
+hf-space/
+.huggingface/
+
+# Temporary
+*.tmp
+*.temp
