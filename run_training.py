@@ -32,22 +32,23 @@ os.makedirs("logs/training_logs", exist_ok=True)
 
 def build_model(num_classes: int = 3) -> Model:
     base = EfficientNetB0(weights="imagenet", include_top=False, input_shape=(224, 224, 3))
-    for layer in base.layers[:-20]:
+    # Freeze only bottom 60% of layers — let top 40% fine-tune
+    freeze_until = int(len(base.layers) * 0.6)
+    for layer in base.layers[:freeze_until]:
         layer.trainable = False
+    for layer in base.layers[freeze_until:]:
+        layer.trainable = True
 
     inputs = keras.Input(shape=(224, 224, 3))
-    x = base(inputs, training=False)
+    x = base(inputs, training=True)
     x = layers.GlobalAveragePooling2D()(x)
-    x = layers.Dense(512, activation="relu")(x)
-    x = layers.BatchNormalization()(x)
-    x = layers.Dropout(0.4)(x)
     x = layers.Dense(256, activation="relu")(x)
     x = layers.Dropout(0.3)(x)
     outputs = layers.Dense(num_classes, activation="softmax")(x)
 
     model = Model(inputs, outputs)
     model.compile(
-        optimizer=keras.optimizers.Adam(1e-4),
+        optimizer=keras.optimizers.Adam(1e-5),  # lower LR for fine-tuning
         loss="sparse_categorical_crossentropy",
         metrics=["accuracy"],
     )
