@@ -46,15 +46,20 @@ def load_dicom_as_rgb(dcm_path: str) -> Optional[np.ndarray]:
 
 
 def build_dataframe(dataset_dir: str) -> pd.DataFrame:
-    # Support both HF Hub layout (data/) and local Downloads layout (root)
-    if os.path.exists(os.path.join(dataset_dir, "data", "stage_2_train_labels.csv")):
+    # Detect layout: HF Hub (images at root) or local Downloads folder
+    if os.path.exists(os.path.join(dataset_dir, "stage_2_train_labels.csv")):
+        # Local Downloads or HF Hub root layout
+        labels_path = os.path.join(dataset_dir, "stage_2_train_labels.csv")
+        class_path = os.path.join(dataset_dir, "stage_2_detailed_class_info.csv")
+        # Images could be in stage_2_train_images/ (local) or root (HF Hub upload)
+        if os.path.exists(os.path.join(dataset_dir, "stage_2_train_images")):
+            train_dir = os.path.join(dataset_dir, "stage_2_train_images")
+        else:
+            train_dir = dataset_dir  # HF Hub: images uploaded to root
+    else:
         labels_path = os.path.join(dataset_dir, "data", "stage_2_train_labels.csv")
         class_path = os.path.join(dataset_dir, "data", "stage_2_detailed_class_info.csv")
         train_dir = os.path.join(dataset_dir, "data", "train_images")
-    else:
-        labels_path = os.path.join(dataset_dir, "stage_2_train_labels.csv")
-        class_path = os.path.join(dataset_dir, "stage_2_detailed_class_info.csv")
-        train_dir = os.path.join(dataset_dir, "stage_2_train_images")
 
     labels_df = pd.read_csv(labels_path)
     class_df = pd.read_csv(class_path)
