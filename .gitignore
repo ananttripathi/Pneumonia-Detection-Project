@@ -54,3 +54,5 @@ hf-space/
 # Temporary
 *.tmp
 *.temp
+*.h5
+*.keras
