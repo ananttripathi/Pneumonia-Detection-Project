@@ -1,5 +1,5 @@
 """
-Streamlit app for Pneumonia Detection — loads model from HF Hub at startup.
+Streamlit app for Pneumonia Detection. Loads model from HF Hub at startup.
 """
 import os
 import sys
@@ -249,7 +249,7 @@ def main():
                 st.success("✅ **No pneumonia detected.** The X-ray appears normal. Continue routine monitoring if clinically indicated.")
 
             if confidence < 0.6:
-                st.info("ℹ️ Low confidence prediction — the model is uncertain. Please seek professional medical review regardless of result.")
+                st.info("ℹ️ Low confidence prediction. The model is uncertain. Please seek professional medical review regardless of result.")
 
     else:
         st.info("👆 Upload a chest X-ray above to get started.")
@@ -259,10 +259,10 @@ def main():
             st.markdown("Lungs appear clear with no consolidation or opacity indicating a healthy chest X-ray.")
         with c2:
             st.markdown("#### 🫁 Lung Opacity")
-            st.markdown("Presence of opacity or consolidation in the lung fields — may indicate pneumonia or infection.")
+            st.markdown("Presence of opacity or consolidation in the lung fields. May indicate pneumonia or infection.")
         with c3:
             st.markdown("#### ⚠️ Not Normal")
-            st.markdown("Abnormality present that is not consistent with typical pneumonia — requires further evaluation.")
+            st.markdown("Abnormality present that is not consistent with typical pneumonia. Requires further evaluation.")
 
 
 if __name__ == "__main__":
