@@ -9,8 +9,8 @@ from PIL import Image
 from huggingface_hub import hf_hub_download
 
 MODEL_REPO = "ananttripathiak/pneumonia-detection-model"
-MODEL_FILENAME = "best_model.h5"
-MODEL_CACHE = "/tmp/best_model.h5"
+MODEL_FILENAME = "best_model.keras"
+MODEL_CACHE = "/tmp/best_model.keras"
 
 CLASS_LABELS = {0: "Normal", 1: "Lung Opacity", 2: "No Lung Opacity / Not Normal"}
 
@@ -42,7 +42,7 @@ def load_model():
 def preprocess(image: Image.Image) -> np.ndarray:
     import cv2
     img = np.array(image.convert("RGB"))
-    img = cv2.resize(img, (224, 224), interpolation=cv2.INTER_AREA)
+    img = cv2.resize(img, (300, 300), interpolation=cv2.INTER_AREA)
     img = img.astype(np.float32) / 255.0
     return np.expand_dims(img, axis=0)
 
@@ -56,7 +56,7 @@ def preprocess_dicom(dcm_path: str) -> np.ndarray:
     img = (img * 255).astype(np.uint8)
     if len(img.shape) == 2:
         img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
-    img = cv2.resize(img, (224, 224), interpolation=cv2.INTER_AREA)
+    img = cv2.resize(img, (300, 300), interpolation=cv2.INTER_AREA)
     return np.expand_dims(img.astype(np.float32) / 255.0, axis=0)
 
 
