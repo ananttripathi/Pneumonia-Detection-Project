@@ -1,207 +1,142 @@
 """
-Streamlit deployment app for Pneumonia Detection
+Streamlit app for Pneumonia Detection — loads model from HF Hub at startup.
 """
-import streamlit as st
+import os
 import numpy as np
+import streamlit as st
 import tensorflow as tf
 from PIL import Image
-import os
-import sys
+from huggingface_hub import hf_hub_download
 
-# Add src to path
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
+MODEL_REPO = "ananttripathiak/pneumonia-detection-model"
+MODEL_FILENAME = "best_model.h5"
+MODEL_CACHE = "/tmp/best_model.h5"
 
-from src.models.predict import predict_pneumonia, preprocess_single_image
-from src.utils.config import CLASS_LABELS, BEST_MODEL_PATH
+CLASS_LABELS = {0: "Normal", 1: "Lung Opacity", 2: "No Lung Opacity / Not Normal"}
 
-# Page configuration
 st.set_page_config(
     page_title="Pneumonia Detection from Chest X-Ray",
     page_icon="🏥",
-    layout="wide"
+    layout="wide",
 )
 
-# Custom CSS
 st.markdown("""
     <style>
-    .main-header {
-        font-size: 2.5rem;
-        font-weight: bold;
-        color: #1f77b4;
-        text-align: center;
-        margin-bottom: 2rem;
-    }
-    .prediction-box {
-        padding: 1.5rem;
-        border-radius: 10px;
-        background-color: #f0f2f6;
-        margin: 1rem 0;
-    }
-    .confidence-high {
-        color: #28a745;
-        font-weight: bold;
-    }
-    .confidence-medium {
-        color: #ffc107;
-        font-weight: bold;
-    }
-    .confidence-low {
-        color: #dc3545;
-        font-weight: bold;
-    }
+    .main-header { font-size:2.2rem; font-weight:bold; color:#1f77b4; text-align:center; margin-bottom:1.5rem; }
+    .pred-box { padding:1.2rem; border-radius:10px; background:#f0f2f6; margin:1rem 0; }
     </style>
 """, unsafe_allow_html=True)
 
-@st.cache_resource
+
+@st.cache_resource(show_spinner="Loading model from Hugging Face Hub…")
 def load_model():
-    """Load the trained model"""
     try:
-        if os.path.exists(BEST_MODEL_PATH):
-            model = tf.keras.models.load_model(BEST_MODEL_PATH)
-            return model
-        else:
-            st.error(f"Model not found at {BEST_MODEL_PATH}")
-            st.info("Please train a model first using the notebooks.")
-            return None
+        path = hf_hub_download(repo_id=MODEL_REPO, filename=MODEL_FILENAME, local_dir="/tmp")
+        model = tf.keras.models.load_model(path)
+        return model
     except Exception as e:
-        st.error(f"Error loading model: {str(e)}")
+        st.error(f"Could not load model: {e}")
         return None
 
+
+def preprocess(image: Image.Image) -> np.ndarray:
+    import cv2
+    img = np.array(image.convert("RGB"))
+    img = cv2.resize(img, (224, 224), interpolation=cv2.INTER_AREA)
+    img = img.astype(np.float32) / 255.0
+    return np.expand_dims(img, axis=0)
+
+
+def preprocess_dicom(dcm_path: str) -> np.ndarray:
+    import cv2, pydicom
+    dcm = pydicom.dcmread(dcm_path)
+    img = dcm.pixel_array.astype(np.float32)
+    if img.max() > 1:
+        img = (img - img.min()) / (img.max() - img.min() + 1e-8)
+    img = (img * 255).astype(np.uint8)
+    if len(img.shape) == 2:
+        img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
+    img = cv2.resize(img, (224, 224), interpolation=cv2.INTER_AREA)
+    return np.expand_dims(img.astype(np.float32) / 255.0, axis=0)
+
+
 def main():
-    # Header
-    st.markdown('<h1 class="main-header">🏥 Pneumonia Detection from Chest X-Ray</h1>', 
-                unsafe_allow_html=True)
-    
-    st.markdown("""
-    This application uses deep learning to detect pneumonia from chest X-ray images.
-    Upload a chest X-ray image (DICOM or standard image format) to get a prediction.
-    
-    **⚠️ Disclaimer**: This tool is for research and educational purposes only. 
-    It should not be used as the sole basis for medical diagnosis.
-    """)
-    
-    # Load model
-    model = load_model()
-    
-    if model is None:
-        st.stop()
-    
-    # Sidebar
-    st.sidebar.header("About")
-    st.sidebar.info("""
-    This application classifies chest X-ray images into three categories:
-    - **Normal**: No pneumonia detected
-    - **Lung Opacity**: Pneumonia detected
-    - **No Lung Opacity / Not Normal**: Abnormality present but not pneumonia
-    """)
-    
-    st.sidebar.header("Instructions")
-    st.sidebar.markdown("""
-    1. Upload a chest X-ray image
-    2. Wait for processing
-    3. View prediction and confidence scores
-    """)
-    
-    # File upload
-    st.header("Upload Image")
-    uploaded_file = st.file_uploader(
-        "Choose a chest X-ray image",
-        type=['dcm', 'png', 'jpg', 'jpeg', 'tiff', 'bmp']
+    st.markdown('<h1 class="main-header">🏥 Pneumonia Detection from Chest X-Ray</h1>', unsafe_allow_html=True)
+    st.markdown(
+        "Upload a chest X-ray image (DICOM or PNG/JPG) to get an AI-assisted classification.\n\n"
+        "**⚠️ Disclaimer:** For research and educational purposes only — not a medical diagnostic tool."
     )
-    
-    if uploaded_file is not None:
-        # Display uploaded image
-        col1, col2 = st.columns([1, 1])
-        
+
+    model = load_model()
+    if model is None:
+        st.warning("Model not available yet. Please train and upload the model first using `run_training.py`.")
+        st.stop()
+
+    st.sidebar.header("Classes")
+    st.sidebar.markdown("- **Normal** — No pneumonia\n- **Lung Opacity** — Pneumonia detected\n- **No Lung Opacity / Not Normal** — Abnormality, not pneumonia")
+    st.sidebar.header("Instructions")
+    st.sidebar.markdown("1. Upload a chest X-ray\n2. Wait for analysis\n3. Review prediction and confidence")
+
+    uploaded = st.file_uploader("Upload Chest X-Ray", type=["dcm", "png", "jpg", "jpeg", "tiff", "bmp"])
+
+    if uploaded:
+        col1, col2 = st.columns(2)
+
         with col1:
             st.subheader("Uploaded Image")
             try:
-                if uploaded_file.name.endswith('.dcm'):
-                    # Handle DICOM
-                    import pydicom
-                    import tempfile
-                    with tempfile.NamedTemporaryFile(delete=False, suffix='.dcm') as tmp_file:
-                        tmp_file.write(uploaded_file.read())
-                        tmp_path = tmp_file.name
-                    
-                    dicom_file = pydicom.dcmread(tmp_path)
-                    image_array = dicom_file.pixel_array
-                    
-                    # Normalize for display
-                    if image_array.max() > 255:
-                        image_array = ((image_array - image_array.min()) / 
-                                      (image_array.max() - image_array.min()) * 255).astype(np.uint8)
-                    
-                    st.image(image_array, use_container_width=True, caption="Chest X-Ray Image")
-                    image_for_pred = tmp_path
+                if uploaded.name.lower().endswith(".dcm"):
+                    import tempfile, pydicom, cv2
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".dcm") as tmp:
+                        tmp.write(uploaded.read())
+                        tmp_path = tmp.name
+                    dcm = pydicom.dcmread(tmp_path)
+                    arr = dcm.pixel_array
+                    if arr.max() > 255:
+                        arr = ((arr - arr.min()) / (arr.max() - arr.min()) * 255).astype(np.uint8)
+                    st.image(arr, use_container_width=True, caption="Chest X-Ray (DICOM)")
+                    img_input = preprocess_dicom(tmp_path)
                 else:
-                    # Handle regular image
-                    image = Image.open(uploaded_file)
-                    st.image(image, use_container_width=True, caption="Chest X-Ray Image")
-                    image_for_pred = image
+                    image = Image.open(uploaded)
+                    st.image(image, use_container_width=True, caption="Chest X-Ray")
+                    img_input = preprocess(image)
             except Exception as e:
-                st.error(f"Error loading image: {str(e)}")
+                st.error(f"Error loading image: {e}")
                 st.stop()
-        
+
         with col2:
-            st.subheader("Prediction Results")
-            
-            # Make prediction
-            try:
-                with st.spinner("Analyzing image..."):
-                    predicted_class, confidence, prob_dict = predict_pneumonia(
-                        model, 
-                        image_for_pred,
-                        class_names=list(CLASS_LABELS.values())
-                    )
-                
-                # Display prediction
-                st.markdown('<div class="prediction-box">', unsafe_allow_html=True)
-                st.markdown(f"### Predicted Class: **{predicted_class}**")
-                
-                # Confidence indicator
-                if confidence >= 0.7:
-                    conf_class = "confidence-high"
-                elif confidence >= 0.5:
-                    conf_class = "confidence-medium"
-                else:
-                    conf_class = "confidence-low"
-                
-                st.markdown(f'<p class="{conf_class}">Confidence: {confidence*100:.2f}%</p>', 
-                           unsafe_allow_html=True)
-                st.markdown('</div>', unsafe_allow_html=True)
-                
-                # Probability distribution
-                st.subheader("Probability Distribution")
-                for class_name, prob in prob_dict.items():
-                    st.progress(prob)
-                    st.text(f"{class_name}: {prob*100:.2f}%")
-                
-                # Recommendations
-                st.subheader("Recommendations")
-                if predicted_class == "Lung Opacity":
-                    st.warning("⚠️ Pneumonia detected. Please consult with a healthcare professional for further evaluation and treatment.")
-                elif predicted_class == "No Lung Opacity / Not Normal":
-                    st.info("ℹ️ Abnormality detected but not pneumonia. Further medical evaluation may be recommended.")
-                else:
-                    st.success("✅ No pneumonia detected. Image appears normal.")
-                
-            except Exception as e:
-                st.error(f"Error making prediction: {str(e)}")
-    
+            st.subheader("Prediction")
+            with st.spinner("Analysing…"):
+                preds = model.predict(img_input, verbose=0)[0]
+
+            pred_idx = int(np.argmax(preds))
+            pred_class = CLASS_LABELS[pred_idx]
+            confidence = float(preds[pred_idx])
+
+            st.markdown(f'<div class="pred-box"><h3>Predicted: <b>{pred_class}</b></h3></div>', unsafe_allow_html=True)
+
+            conf_color = "green" if confidence >= 0.7 else ("orange" if confidence >= 0.5 else "red")
+            st.markdown(f"**Confidence:** :{conf_color}[{confidence*100:.1f}%]")
+
+            st.subheader("Class Probabilities")
+            for idx, label in CLASS_LABELS.items():
+                st.progress(float(preds[idx]), text=f"{label}: {preds[idx]*100:.1f}%")
+
+            st.subheader("Recommendation")
+            if pred_class == "Lung Opacity":
+                st.warning("⚠️ Pneumonia detected. Please consult a healthcare professional.")
+            elif pred_class == "No Lung Opacity / Not Normal":
+                st.info("ℹ️ Abnormality detected. Further medical evaluation recommended.")
+            else:
+                st.success("✅ No pneumonia detected. Image appears normal.")
     else:
-        # Show sample or instructions
-        st.info("👆 Please upload a chest X-ray image to get started.")
-        
-        # Example section
-        with st.expander("📖 How to use"):
-            st.markdown("""
-            1. **Prepare your image**: Ensure the image is a chest X-ray in DICOM (.dcm) or standard image format
-            2. **Upload**: Click the upload area above and select your image file
-            3. **Wait for analysis**: The model will process the image (usually takes a few seconds)
-            4. **Review results**: Check the prediction, confidence scores, and recommendations
-            5. **Consult professionals**: Always consult qualified healthcare professionals for medical decisions
-            """)
+        st.info("👆 Upload a chest X-ray to get started.")
+        with st.expander("How to use"):
+            st.markdown("1. Prepare a chest X-ray in DICOM or standard image format\n"
+                        "2. Click upload and select the file\n"
+                        "3. Wait a few seconds for the model to analyse\n"
+                        "4. Review results — always consult a doctor for medical decisions")
+
 
 if __name__ == "__main__":
     main()

@@ -1,6 +1,25 @@
+---
+title: Pneumonia Detection
+emoji: 🏥
+colorFrom: blue
+colorTo: indigo
+sdk: streamlit
+sdk_version: "1.30.0"
+app_file: src/deployment/app.py
+pinned: false
+---
+
 # Pneumonia Detection from Chest X-Ray Images
 
-CNN-based pneumonia detection from chest X-rays using custom CNNs and transfer learning (VGG16, ResNet50, InceptionV3, EfficientNet, DenseNet). Includes DICOM handling, Streamlit deployment, and Docker support.
+CNN-based pneumonia detection from chest X-rays using EfficientNetB0 transfer learning. Includes DICOM handling, Streamlit deployment, and full MLOps pipeline via Hugging Face Hub.
+
+## 🔗 Resources
+
+| Resource | Link |
+|----------|------|
+| 🤗 Dataset | [ananttripathiak/pneumonia-detection-dataset](https://huggingface.co/datasets/ananttripathiak/pneumonia-detection-dataset) |
+| 🤖 Model | [ananttripathiak/pneumonia-detection-model](https://huggingface.co/ananttripathiak/pneumonia-detection-model) |
+| 🚀 Live App | [HF Space](https://huggingface.co/spaces/ananttripathiak/pneumonia-detection-space) |
 
 ## ⚡ Quick Start
 
