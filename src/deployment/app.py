@@ -16,6 +16,8 @@ MODEL_REPO = "ananttripathiak/pneumonia-detection-model"
 MODEL_FILENAME = "best_model.weights.h5"
 
 CLASS_LABELS = {0: "Normal", 1: "Lung Opacity", 2: "No Lung Opacity / Not Normal"}
+CLASS_COLORS = {0: "#28a745", 1: "#dc3545", 2: "#fd7e14"}
+CLASS_ICONS  = {0: "✅", 1: "🫁", 2: "⚠️"}
 
 st.set_page_config(
     page_title="Pneumonia Detection from Chest X-Ray",
@@ -25,8 +27,61 @@ st.set_page_config(
 
 st.markdown("""
     <style>
-    .main-header { font-size:2.2rem; font-weight:bold; color:#1f77b4; text-align:center; margin-bottom:1.5rem; }
-    .pred-box { padding:1.2rem; border-radius:10px; background:#f0f2f6; margin:1rem 0; }
+    .main-header {
+        font-size: 2.4rem;
+        font-weight: 800;
+        color: #1f77b4;
+        text-align: center;
+        margin-bottom: 0.3rem;
+    }
+    .sub-header {
+        text-align: center;
+        color: #6c757d;
+        font-size: 1rem;
+        margin-bottom: 2rem;
+    }
+    .pred-card {
+        padding: 1.4rem 1.8rem;
+        border-radius: 12px;
+        border-left: 6px solid;
+        margin: 1rem 0;
+        background: #1e1e2e;
+        color: #f0f0f0;
+    }
+    .pred-label {
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin: 0;
+    }
+    .pred-sub {
+        font-size: 0.9rem;
+        color: #aaa;
+        margin-top: 0.2rem;
+    }
+    .metric-row {
+        display: flex;
+        gap: 1rem;
+        margin: 1rem 0;
+    }
+    .metric-box {
+        flex: 1;
+        background: #1e1e2e;
+        border-radius: 10px;
+        padding: 0.8rem 1rem;
+        text-align: center;
+        color: #f0f0f0;
+    }
+    .metric-val {
+        font-size: 1.8rem;
+        font-weight: 700;
+    }
+    .metric-lbl {
+        font-size: 0.75rem;
+        color: #aaa;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    .divider { border-top: 1px solid #333; margin: 1.2rem 0; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -47,8 +102,7 @@ def preprocess(image: Image.Image) -> np.ndarray:
     import cv2
     img = np.array(image.convert("RGB"))
     img = cv2.resize(img, (300, 300), interpolation=cv2.INTER_AREA)
-    img = img.astype(np.float32) / 255.0
-    return np.expand_dims(img, axis=0)
+    return np.expand_dims(img.astype(np.float32) / 255.0, axis=0)
 
 
 def preprocess_dicom(dcm_path: str) -> np.ndarray:
@@ -65,29 +119,45 @@ def preprocess_dicom(dcm_path: str) -> np.ndarray:
 
 
 def main():
-    st.markdown('<h1 class="main-header">🏥 Pneumonia Detection from Chest X-Ray</h1>', unsafe_allow_html=True)
-    st.markdown(
-        "Upload a chest X-ray image (DICOM or PNG/JPG) to get an AI-assisted classification.\n\n"
-        "**⚠️ Disclaimer:** For research and educational purposes only — not a medical diagnostic tool."
-    )
+    st.markdown('<h1 class="main-header">🏥 Pneumonia Detection</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="sub-header">AI-assisted chest X-ray classification using EfficientNetB3 · 73% validation accuracy</p>', unsafe_allow_html=True)
 
     model = load_model()
     if model is None:
         st.warning("Model not available yet. Please train and upload the model first using `run_training.py`.")
         st.stop()
 
-    st.sidebar.header("Classes")
-    st.sidebar.markdown("- **Normal** — No pneumonia\n- **Lung Opacity** — Pneumonia detected\n- **No Lung Opacity / Not Normal** — Abnormality, not pneumonia")
-    st.sidebar.header("Instructions")
-    st.sidebar.markdown("1. Upload a chest X-ray\n2. Wait for analysis\n3. Review prediction and confidence")
+    # Sidebar
+    with st.sidebar:
+        st.markdown("### About")
+        st.markdown(
+            "This tool classifies chest X-rays into 3 categories using a deep learning model "
+            "trained on the RSNA Pneumonia Detection dataset (26,000+ images)."
+        )
+        st.markdown("### Classes")
+        st.markdown("""
+| Class | Meaning |
+|-------|---------|
+| ✅ Normal | No pneumonia detected |
+| 🫁 Lung Opacity | Pneumonia likely present |
+| ⚠️ Not Normal | Abnormality, not pneumonia |
+        """)
+        st.markdown("### Model Info")
+        st.markdown("- **Architecture:** EfficientNetB3\n- **Input size:** 300×300\n- **Val accuracy:** ~73%\n- **Dataset:** RSNA 2018")
+        st.markdown("---")
+        st.caption("⚠️ For research and educational purposes only. Not a medical diagnostic tool.")
 
-    uploaded = st.file_uploader("Upload Chest X-Ray", type=["dcm", "png", "jpg", "jpeg", "tiff", "bmp"])
+    uploaded = st.file_uploader(
+        "Upload a Chest X-Ray (DICOM or PNG/JPG)",
+        type=["dcm", "png", "jpg", "jpeg", "tiff", "bmp"],
+        help="Supports DICOM (.dcm) and standard image formats up to 200MB"
+    )
 
     if uploaded:
-        col1, col2 = st.columns(2)
+        col1, col2 = st.columns([1, 1], gap="large")
 
         with col1:
-            st.subheader("Uploaded Image")
+            st.markdown("#### Uploaded Image")
             try:
                 if uploaded.name.lower().endswith(".dcm"):
                     import tempfile, pydicom, cv2
@@ -98,48 +168,101 @@ def main():
                     arr = dcm.pixel_array
                     if arr.max() > 255:
                         arr = ((arr - arr.min()) / (arr.max() - arr.min()) * 255).astype(np.uint8)
-                    st.image(arr, use_container_width=True, caption="Chest X-Ray (DICOM)")
+                    st.image(arr, use_container_width=True, caption=f"DICOM · {uploaded.name}")
                     img_input = preprocess_dicom(tmp_path)
                 else:
                     image = Image.open(uploaded)
-                    st.image(image, use_container_width=True, caption="Chest X-Ray")
+                    st.image(image, use_container_width=True, caption=uploaded.name)
                     img_input = preprocess(image)
             except Exception as e:
                 st.error(f"Error loading image: {e}")
                 st.stop()
 
         with col2:
-            st.subheader("Prediction")
-            with st.spinner("Analysing…"):
+            st.markdown("#### Analysis Results")
+            with st.spinner("Running inference…"):
                 preds = model.predict(img_input, verbose=0)[0]
 
             pred_idx = int(np.argmax(preds))
             pred_class = CLASS_LABELS[pred_idx]
             confidence = float(preds[pred_idx])
+            color = CLASS_COLORS[pred_idx]
+            icon = CLASS_ICONS[pred_idx]
 
-            st.markdown(f'<div class="pred-box"><h3>Predicted: <b>{pred_class}</b></h3></div>', unsafe_allow_html=True)
+            # Prediction card
+            st.markdown(f"""
+            <div class="pred-card" style="border-color:{color}">
+                <p class="pred-label" style="color:{color}">{icon} {pred_class}</p>
+                <p class="pred-sub">Primary prediction with {confidence*100:.1f}% confidence</p>
+            </div>
+            """, unsafe_allow_html=True)
 
-            conf_color = "green" if confidence >= 0.7 else ("orange" if confidence >= 0.5 else "red")
-            st.markdown(f"**Confidence:** :{conf_color}[{confidence*100:.1f}%]")
+            # Confidence + entropy metrics
+            entropy = float(-np.sum(preds * np.log(preds + 1e-8)))
+            max_entropy = float(np.log(3))
+            certainty = 1.0 - entropy / max_entropy
 
-            st.subheader("Class Probabilities")
+            st.markdown(f"""
+            <div class="metric-row">
+                <div class="metric-box">
+                    <div class="metric-val" style="color:{color}">{confidence*100:.1f}%</div>
+                    <div class="metric-lbl">Confidence</div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-val">{certainty*100:.1f}%</div>
+                    <div class="metric-lbl">Certainty</div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-val">73%</div>
+                    <div class="metric-lbl">Model Accuracy</div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+
+            # Class probabilities
+            st.markdown("**Class Probabilities**")
             for idx, label in CLASS_LABELS.items():
-                st.progress(float(preds[idx]), text=f"{label}: {preds[idx]*100:.1f}%")
+                bar_color = CLASS_COLORS[idx]
+                st.markdown(f"""
+                <div style="margin-bottom:0.6rem">
+                    <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+                        <span style="font-size:0.88rem">{CLASS_ICONS[idx]} {label}</span>
+                        <span style="font-size:0.88rem;font-weight:600;color:{bar_color}">{preds[idx]*100:.1f}%</span>
+                    </div>
+                    <div style="background:#333;border-radius:6px;height:10px">
+                        <div style="background:{bar_color};width:{preds[idx]*100:.1f}%;height:10px;border-radius:6px;transition:width 0.3s"></div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
 
-            st.subheader("Recommendation")
+            st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+
+            # Recommendation
+            st.markdown("**Clinical Recommendation**")
             if pred_class == "Lung Opacity":
-                st.warning("⚠️ Pneumonia detected. Please consult a healthcare professional.")
+                st.error("🫁 **Lung opacity detected.** This may indicate pneumonia or other pulmonary conditions. Urgent consultation with a radiologist or physician is strongly recommended.")
             elif pred_class == "No Lung Opacity / Not Normal":
-                st.info("ℹ️ Abnormality detected. Further medical evaluation recommended.")
+                st.warning("⚠️ **Abnormality detected** but does not appear consistent with typical pneumonia. Further evaluation by a medical professional is recommended.")
             else:
-                st.success("✅ No pneumonia detected. Image appears normal.")
+                st.success("✅ **No pneumonia detected.** The X-ray appears normal. Continue routine monitoring if clinically indicated.")
+
+            if confidence < 0.6:
+                st.info("ℹ️ Low confidence prediction — the model is uncertain. Please seek professional medical review regardless of result.")
+
     else:
-        st.info("👆 Upload a chest X-ray to get started.")
-        with st.expander("How to use"):
-            st.markdown("1. Prepare a chest X-ray in DICOM or standard image format\n"
-                        "2. Click upload and select the file\n"
-                        "3. Wait a few seconds for the model to analyse\n"
-                        "4. Review results — always consult a doctor for medical decisions")
+        st.info("👆 Upload a chest X-ray above to get started.")
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.markdown("#### ✅ Normal")
+            st.markdown("Lungs appear clear with no consolidation or opacity indicating a healthy chest X-ray.")
+        with c2:
+            st.markdown("#### 🫁 Lung Opacity")
+            st.markdown("Presence of opacity or consolidation in the lung fields — may indicate pneumonia or infection.")
+        with c3:
+            st.markdown("#### ⚠️ Not Normal")
+            st.markdown("Abnormality present that is not consistent with typical pneumonia — requires further evaluation.")
 
 
 if __name__ == "__main__":
