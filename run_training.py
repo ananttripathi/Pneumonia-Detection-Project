@@ -1,6 +1,6 @@
 """
 End-to-end training pipeline — downloads data from HF Hub (or uses local files),
-trains EfficientNetB0, and pushes the best model back to HF Hub.
+trains EfficientNetB3, and pushes the best model back to HF Hub.
 
 Usage (local data — dataset already on disk):
     python run_training.py --token YOUR_HF_TOKEN --local-data /Users/ananttripathi/Downloads
@@ -17,39 +17,48 @@ from sklearn.utils.class_weight import compute_class_weight
 from huggingface_hub import HfApi, create_repo
 import tensorflow as tf
 from tensorflow import keras
-from tensorflow.keras.applications import EfficientNetB0
+from tensorflow.keras.applications import EfficientNetB3
 from tensorflow.keras import layers, Model
-from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, ReduceLROnPlateau
+from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping
+
+from tensorflow.keras import mixed_precision
+mixed_precision.set_global_policy("mixed_float16")
 
 sys.path.insert(0, os.path.dirname(__file__))
 from src.data.hf_data_loader import download_dataset, build_dataframe, DICOMSequence
 
 MODEL_REPO = "ananttripathiak/pneumonia-detection-model"
-MODEL_SAVE_PATH = "models/saved_models/best_model.h5"
+MODEL_SAVE_PATH = "models/saved_models/best_model.keras"
 os.makedirs("models/saved_models", exist_ok=True)
 os.makedirs("logs/training_logs", exist_ok=True)
 
+IMG_SIZE = 300  # EfficientNetB3 native size
+
 
 def build_model(num_classes: int = 3) -> Model:
-    base = EfficientNetB0(weights="imagenet", include_top=False, input_shape=(224, 224, 3))
-    # Freeze only bottom 60% of layers — let top 40% fine-tune
-    freeze_until = int(len(base.layers) * 0.6)
+    base = EfficientNetB3(weights="imagenet", include_top=False, input_shape=(IMG_SIZE, IMG_SIZE, 3))
+
+    # Freeze bottom 50%, fine-tune top 50%
+    freeze_until = int(len(base.layers) * 0.5)
     for layer in base.layers[:freeze_until]:
         layer.trainable = False
     for layer in base.layers[freeze_until:]:
         layer.trainable = True
 
-    inputs = keras.Input(shape=(224, 224, 3))
+    inputs = keras.Input(shape=(IMG_SIZE, IMG_SIZE, 3))
     x = base(inputs, training=True)
     x = layers.GlobalAveragePooling2D()(x)
+    x = layers.Dense(512, activation="relu")(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.Dropout(0.4)(x)
     x = layers.Dense(256, activation="relu")(x)
     x = layers.Dropout(0.3)(x)
     outputs = layers.Dense(num_classes, activation="softmax")(x)
 
     model = Model(inputs, outputs)
     model.compile(
-        optimizer=keras.optimizers.Adam(1e-5),  # lower LR for fine-tuning
-        loss="sparse_categorical_crossentropy",
+        optimizer=keras.optimizers.Adam(1e-4),
+        loss=keras.losses.SparseCategoricalCrossentropy(from_logits=False),
         metrics=["accuracy"],
     )
     model.summary()
@@ -59,7 +68,7 @@ def build_model(num_classes: int = 3) -> Model:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--token", required=True, help="HF write token")
-    parser.add_argument("--epochs", type=int, default=20)
+    parser.add_argument("--epochs", type=int, default=15)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--data-dir", default="/tmp/pneumonia-data", help="HF Hub download dir")
     parser.add_argument("--local-data", default=None,
@@ -74,7 +83,7 @@ def main():
         dataset_dir = download_dataset(local_dir=args.data_dir, token=args.token)
 
     # 2 — Build dataframe of filepaths + labels
-    df = build_dataframe(dataset_dir)
+    df = build_dataframe(dataset_dir, img_size=IMG_SIZE)
 
     # 3 — Train / val split (stratified)
     train_df, val_df = train_test_split(
@@ -90,20 +99,28 @@ def main():
     print(f"Class weights: {class_weights}")
 
     # 5 — Data generators
-    train_gen = DICOMSequence(train_df, batch_size=args.batch_size, augment=True)
-    val_gen = DICOMSequence(val_df, batch_size=args.batch_size, augment=False)
+    train_gen = DICOMSequence(train_df, batch_size=args.batch_size, augment=True, img_size=IMG_SIZE)
+    val_gen = DICOMSequence(val_df, batch_size=args.batch_size, augment=False, img_size=IMG_SIZE)
 
     # 6 — Build model
     model = build_model()
 
-    # 7 — Callbacks
+    # 7 — Cosine decay LR schedule
+    total_steps = len(train_gen) * args.epochs
+    lr_schedule = keras.optimizers.schedules.CosineDecay(
+        initial_learning_rate=1e-4,
+        decay_steps=total_steps,
+        alpha=1e-6,
+    )
+    model.optimizer.learning_rate = lr_schedule
+
+    # 8 — Callbacks
     callbacks = [
         ModelCheckpoint(MODEL_SAVE_PATH, monitor="val_accuracy", save_best_only=True, verbose=1),
-        EarlyStopping(monitor="val_accuracy", patience=5, restore_best_weights=True, verbose=1),
-        ReduceLROnPlateau(monitor="val_loss", factor=0.5, patience=3, min_lr=1e-7, verbose=1),
+        EarlyStopping(monitor="val_accuracy", patience=7, restore_best_weights=True, verbose=1),
     ]
 
-    # 8 — Train
+    # 9 — Train
     history = model.fit(
         train_gen,
         validation_data=val_gen,
@@ -113,19 +130,19 @@ def main():
         verbose=1,
     )
 
-    # 9 — Upload model to HF Hub
+    # 10 — Upload model to HF Hub
     print(f"\nUploading model to {MODEL_REPO}...")
     api = HfApi(token=args.token)
     create_repo(repo_id=MODEL_REPO, repo_type="model", token=args.token, exist_ok=True)
     api.upload_file(
         path_or_fileobj=MODEL_SAVE_PATH,
-        path_in_repo="best_model.h5",
+        path_in_repo="best_model.keras",
         repo_id=MODEL_REPO,
         repo_type="model",
     )
     print(f"Model uploaded: https://huggingface.co/{MODEL_REPO}")
 
-    # 10 — Print final metrics
+    # 11 — Print final metrics
     val_acc = max(history.history["val_accuracy"])
     print(f"\nBest val accuracy: {val_acc:.4f}")
 
