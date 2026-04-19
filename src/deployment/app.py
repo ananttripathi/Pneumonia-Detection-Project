@@ -32,7 +32,7 @@ st.markdown("""
 def load_model():
     try:
         path = hf_hub_download(repo_id=MODEL_REPO, filename=MODEL_FILENAME, local_dir="/tmp")
-        model = tf.keras.models.load_model(path)
+        model = tf.keras.models.load_model(path, compile=False)
         return model
     except Exception as e:
         st.error(f"Could not load model: {e}")
