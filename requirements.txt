@@ -6,6 +6,8 @@ seaborn>=0.11.0
 tqdm>=4.62.0
 
 # Deep Learning
+# On Apple Silicon (M1/M2/M3/M4/M5): pip install tensorflow-macos tensorflow-metal
+# On Linux/Windows/Colab:             pip install tensorflow>=2.10.0
 tensorflow>=2.10.0
 
 # Image Processing
