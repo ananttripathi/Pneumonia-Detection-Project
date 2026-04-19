@@ -23,10 +23,10 @@ COPY . .
 RUN mkdir -p models/saved_models logs/training_logs data/raw data/processed
 
 # Expose Streamlit port
-EXPOSE 8501
+EXPOSE 7860
 
 # Health check
-HEALTHCHECK CMD curl --fail http://localhost:8501/_stcore/health
+HEALTHCHECK CMD curl --fail http://localhost:7860/_stcore/health
 
 # Run Streamlit app
-CMD ["streamlit", "run", "src/deployment/app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+CMD ["streamlit", "run", "src/deployment/app.py", "--server.port=7860", "--server.address=0.0.0.0"]

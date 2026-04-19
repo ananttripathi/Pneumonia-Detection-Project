@@ -3,9 +3,7 @@ title: Pneumonia Detection
 emoji: 🏥
 colorFrom: blue
 colorTo: indigo
-sdk: streamlit
-sdk_version: "1.30.0"
-app_file: src/deployment/app.py
+sdk: docker
 pinned: false
 ---
 
