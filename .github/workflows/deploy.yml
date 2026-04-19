@@ -20,6 +20,7 @@ jobs:
           git config user.email "ananttripathiak@gmail.com"
           git config user.name "ananttripathi"
           git remote add space https://ananttripathiak:${HF_TOKEN}@huggingface.co/spaces/ananttripathiak/pneumonia-detection-space
-          git rm --cached models/saved_models/best_model.h5 2>/dev/null || true
-          git rm --cached models/saved_models/best_model.keras 2>/dev/null || true
+          git filter-branch --force --index-filter \
+            "git rm --cached --ignore-unmatch models/saved_models/best_model.h5 models/saved_models/best_model.keras" \
+            --prune-empty --tag-name-filter cat -- --all
           git push space main --force
