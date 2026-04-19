@@ -1,10 +1,12 @@
 """
-End-to-end training pipeline — downloads data from HF Hub, trains
-EfficientNetB0, and pushes the best model back to HF Hub.
+End-to-end training pipeline — downloads data from HF Hub (or uses local files),
+trains EfficientNetB0, and pushes the best model back to HF Hub.
 
-Usage:
+Usage (local data — dataset already on disk):
+    python run_training.py --token YOUR_HF_TOKEN --local-data /Users/ananttripathi/Downloads
+
+Usage (download from HF Hub):
     python run_training.py --token YOUR_HF_TOKEN
-    python run_training.py --token YOUR_HF_TOKEN --epochs 30 --batch-size 32
 """
 import os
 import sys
@@ -58,11 +60,17 @@ def main():
     parser.add_argument("--token", required=True, help="HF write token")
     parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--batch-size", type=int, default=32)
-    parser.add_argument("--data-dir", default="/tmp/pneumonia-data")
+    parser.add_argument("--data-dir", default="/tmp/pneumonia-data", help="HF Hub download dir")
+    parser.add_argument("--local-data", default=None,
+                        help="Use local data dir instead of HF Hub download (e.g. /Users/you/Downloads)")
     args = parser.parse_args()
 
-    # 1 — Download dataset
-    dataset_dir = download_dataset(local_dir=args.data_dir, token=args.token)
+    # 1 — Get dataset (local or HF Hub)
+    if args.local_data:
+        print(f"Using local data from {args.local_data}")
+        dataset_dir = args.local_data
+    else:
+        dataset_dir = download_dataset(local_dir=args.data_dir, token=args.token)
 
     # 2 — Build dataframe of filepaths + labels
     df = build_dataframe(dataset_dir)
