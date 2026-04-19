@@ -17,52 +17,18 @@ from sklearn.utils.class_weight import compute_class_weight
 from huggingface_hub import HfApi, create_repo
 import tensorflow as tf
 from tensorflow import keras
-from tensorflow.keras.applications import EfficientNetB3
-from tensorflow.keras import layers, Model
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping
-
 from tensorflow.keras import mixed_precision
 mixed_precision.set_global_policy("mixed_float16")
 
 sys.path.insert(0, os.path.dirname(__file__))
 from src.data.hf_data_loader import download_dataset, build_dataframe, DICOMSequence
+from src.model import build_model, IMG_SIZE
 
 MODEL_REPO = "ananttripathiak/pneumonia-detection-model"
-MODEL_SAVE_PATH = "models/saved_models/best_model.keras"
+WEIGHTS_SAVE_PATH = "models/saved_models/best_model.weights.h5"
 os.makedirs("models/saved_models", exist_ok=True)
 os.makedirs("logs/training_logs", exist_ok=True)
-
-IMG_SIZE = 300  # EfficientNetB3 native size
-
-
-def build_model(num_classes: int = 3) -> Model:
-    base = EfficientNetB3(weights="imagenet", include_top=False, input_shape=(IMG_SIZE, IMG_SIZE, 3))
-
-    # Freeze bottom 50%, fine-tune top 50%
-    freeze_until = int(len(base.layers) * 0.5)
-    for layer in base.layers[:freeze_until]:
-        layer.trainable = False
-    for layer in base.layers[freeze_until:]:
-        layer.trainable = True
-
-    inputs = keras.Input(shape=(IMG_SIZE, IMG_SIZE, 3))
-    x = base(inputs, training=True)
-    x = layers.GlobalAveragePooling2D()(x)
-    x = layers.Dense(512, activation="relu")(x)
-    x = layers.BatchNormalization()(x)
-    x = layers.Dropout(0.4)(x)
-    x = layers.Dense(256, activation="relu")(x)
-    x = layers.Dropout(0.3)(x)
-    outputs = layers.Dense(num_classes, activation="softmax")(x)
-
-    model = Model(inputs, outputs)
-    model.compile(
-        optimizer=keras.optimizers.Adam(1e-4),
-        loss=keras.losses.SparseCategoricalCrossentropy(from_logits=False),
-        metrics=["accuracy"],
-    )
-    model.summary()
-    return model
 
 
 def main():
@@ -104,6 +70,12 @@ def main():
 
     # 6 — Build model
     model = build_model()
+    model.compile(
+        optimizer=keras.optimizers.Adam(1e-4),
+        loss=keras.losses.SparseCategoricalCrossentropy(from_logits=False),
+        metrics=["accuracy"],
+    )
+    model.summary()
 
     # 7 — Cosine decay LR schedule
     total_steps = len(train_gen) * args.epochs
@@ -114,9 +86,10 @@ def main():
     )
     model.optimizer.learning_rate = lr_schedule
 
-    # 8 — Callbacks
+    # 8 — Callbacks (save weights only — avoids Keras version serialization issues)
     callbacks = [
-        ModelCheckpoint(MODEL_SAVE_PATH, monitor="val_accuracy", save_best_only=True, verbose=1),
+        ModelCheckpoint(WEIGHTS_SAVE_PATH, monitor="val_accuracy", save_best_only=True,
+                        save_weights_only=True, verbose=1),
         EarlyStopping(monitor="val_accuracy", patience=7, restore_best_weights=True, verbose=1),
     ]
 
@@ -130,13 +103,13 @@ def main():
         verbose=1,
     )
 
-    # 10 — Upload model to HF Hub
-    print(f"\nUploading model to {MODEL_REPO}...")
+    # 10 — Upload weights to HF Hub
+    print(f"\nUploading model weights to {MODEL_REPO}...")
     api = HfApi(token=args.token)
     create_repo(repo_id=MODEL_REPO, repo_type="model", token=args.token, exist_ok=True)
     api.upload_file(
-        path_or_fileobj=MODEL_SAVE_PATH,
-        path_in_repo="best_model.keras",
+        path_or_fileobj=WEIGHTS_SAVE_PATH,
+        path_in_repo="best_model.weights.h5",
         repo_id=MODEL_REPO,
         repo_type="model",
     )

@@ -2,15 +2,18 @@
 Streamlit app for Pneumonia Detection — loads model from HF Hub at startup.
 """
 import os
+import sys
 import numpy as np
 import streamlit as st
 import tensorflow as tf
 from PIL import Image
 from huggingface_hub import hf_hub_download
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+from src.model import build_model
+
 MODEL_REPO = "ananttripathiak/pneumonia-detection-model"
-MODEL_FILENAME = "best_model.keras"
-MODEL_CACHE = "/tmp/best_model.keras"
+MODEL_FILENAME = "best_model.weights.h5"
 
 CLASS_LABELS = {0: "Normal", 1: "Lung Opacity", 2: "No Lung Opacity / Not Normal"}
 
@@ -31,8 +34,9 @@ st.markdown("""
 @st.cache_resource(show_spinner="Loading model from Hugging Face Hub…")
 def load_model():
     try:
-        path = hf_hub_download(repo_id=MODEL_REPO, filename=MODEL_FILENAME, local_dir="/tmp")
-        model = tf.keras.models.load_model(path, compile=False)
+        weights_path = hf_hub_download(repo_id=MODEL_REPO, filename=MODEL_FILENAME, local_dir="/tmp")
+        model = build_model()
+        model.load_weights(weights_path)
         return model
     except Exception as e:
         st.error(f"Could not load model: {e}")
