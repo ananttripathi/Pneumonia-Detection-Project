@@ -120,7 +120,7 @@ def preprocess_dicom(dcm_path: str) -> np.ndarray:
 
 def main():
     st.markdown('<h1 class="main-header">🏥 Pneumonia Detection</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="sub-header">AI-assisted chest X-ray classification using EfficientNetB3 · 73% validation accuracy</p>', unsafe_allow_html=True)
+    st.markdown('<p class="sub-header">AI-assisted chest X-ray classification using EfficientNetB3 · 74.76% validation accuracy</p>', unsafe_allow_html=True)
 
     model = load_model()
     if model is None:
@@ -143,7 +143,7 @@ def main():
 | ⚠️ Not Normal | Abnormality, not pneumonia |
         """)
         st.markdown("### Model Info")
-        st.markdown("- **Architecture:** EfficientNetB3\n- **Input size:** 300×300\n- **Val accuracy:** ~73%\n- **Dataset:** RSNA 2018")
+        st.markdown("- **Architecture:** EfficientNetB3\n- **Input size:** 300×300\n- **Val accuracy:** 74.76%\n- **Dataset:** RSNA 2018")
         st.markdown("---")
         st.caption("⚠️ For research and educational purposes only. Not a medical diagnostic tool.")
 
@@ -213,7 +213,7 @@ def main():
                     <div class="metric-lbl">Certainty</div>
                 </div>
                 <div class="metric-box">
-                    <div class="metric-val">73%</div>
+                    <div class="metric-val">74.76%</div>
                     <div class="metric-lbl">Model Accuracy</div>
                 </div>
             </div>
